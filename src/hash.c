@@ -1,4 +1,12 @@
+/*
+* Chi Vo
+* Sriram Vujjini
+* John Rojas
+* 30 MARCH 2025
 
+*Operating Systems - Project 2: Cracking Passwords
+* the purpose of this project is to optimize hash.c without changing its original functionality by using threads
+*/
 
 #include <stdio.h>
 #include <string.h>
@@ -10,9 +18,7 @@
 
 #define KEEP 16 // only the first 16 bytes of a hash are kept
 #define HASH_SIZE 8388607  // Large prime number for better distribution
-// pthread_mutex_t hash_map_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t hash_map_rwlock = PTHREAD_RWLOCK_INITIALIZER;
-
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Structure for storing password details
@@ -61,7 +67,6 @@ int compare_hashes(char *a, char *b) {
 
 // Structure to hold the data for each thread
 typedef struct {
-    // hash_map *map;
     hash_map *cracked_map;
     struct cracked_hash_details *cracked_hashes;
     char **passwords; // Array of passwords
@@ -73,9 +78,6 @@ typedef struct {
 void* crack_passwords_thread(void *arg) {
     thread_data *data = (thread_data *)arg;
     char hex_hash[2 * KEEP + 1]; // Hashed passwords
-    // FILE *fp;
-    // fp = fopen(data->output, "a");
-    // assert(fp != NULL);
 
     for (int i = data->start_index; i < data->end_index; i++) {
         char *password = data->passwords[i];
@@ -86,42 +88,24 @@ void* crack_passwords_thread(void *arg) {
                 sprintf(&hex_hash[2 * k], "%02x", hash[k]);
             hex_hash[2 * KEEP] = '\0';
 
-            // Check if hash already exists
-            // cracked_hash *exists = get_hash_map(data->map, hex_hash);
-            // if (exists == NULL) {
-            //     insert_hash_map(data->map, hex_hash, password, algs[j]);
-            // }
-            // pthread_mutex_lock(&hash_map_lock);
             pthread_rwlock_rdlock(&hash_map_rwlock);  
             cracked_hash *exists = get_hash_map(data->cracked_map, hex_hash);
             pthread_rwlock_unlock(&hash_map_rwlock);
-            // pthread_mutex_unlock(&hash_map_lock);
-            // pthread_mutex_lock(&file_mutex);  
             if (exists){
                 if (exists->password != NULL){
-                    // fprintf(fp, "not found\n");
                     continue;
                 }
-                // fprintf(fp, "%s:%s\n", password, algs[j]);
-                // pthread_mutex_lock(&hash_map_lock);
                 pthread_rwlock_rdlock(&hash_map_rwlock);  
                 data->cracked_hashes[exists->index].password = strdup(password);
                 data->cracked_hashes[exists->index].alg = strdup(algs[j]);
                 insert_hash_map(data->cracked_map, hex_hash, password, algs[j], exists->index);
                 pthread_rwlock_unlock(&hash_map_rwlock);
 
-                // pthread_mutex_unlock(&hash_map_lock);
             }
-            // else{
-            //     fprintf(fp, "not found\n");
-            // }
-            // pthread_mutex_unlock(&file_mutex); 
 
             free(hash);
         }
     }
-
-    // fclose(fp);
 
     return NULL;
 }
@@ -133,7 +117,6 @@ void* crack_passwords_thread(void *arg) {
 //                any of them matches this password. When multiple passwords match
 //                the same hash, only the first one in the list is printed.
 void crack_hashed_passwords(char *password_list, char *hashed_list, char *output) {
-    // hash_map *map = create_hash_map();
     hash_map *cracked_map = create_hash_map();
     FILE *fp;
     char password[256];  // passwords have at most 255 characters
@@ -152,12 +135,7 @@ void crack_hashed_passwords(char *password_list, char *hashed_list, char *output
         for (int i = 0; i < n_hashed; i++) {
             char curr_hash[2 * KEEP + 1];
             fscanf(fp, "%s", cracked_hashes[i].hash);
-            // fscanf(fp, "%s", curr_hash);
-            // cracked_hashes[i].hash = strdup(curr_hash);
-            // printf("fscanf done\n");
-            // insert_hash_map(cracked_map, curr_hash, NULL, NULL, i);
             insert_hash_map(cracked_map, cracked_hashes[i].hash, NULL, NULL, i);
-            // printf("insert done\n");
             cracked_hashes[i].password = NULL;
             cracked_hashes[i].alg = NULL;
         }
@@ -186,7 +164,6 @@ void crack_hashed_passwords(char *password_list, char *hashed_list, char *output
     int passwords_per_thread = n_passwords / num_threads;
 
     for (int i = 0; i < num_threads; i++) {
-        // thread_data_array[i].map = map;
         thread_data_array[i].cracked_map = cracked_map;
         thread_data_array[i].cracked_hashes = cracked_hashes;
         thread_data_array[i].passwords = passwords;
@@ -199,18 +176,6 @@ void crack_hashed_passwords(char *password_list, char *hashed_list, char *output
     for (int i = 0; i < num_threads; i++) {
         pthread_join(threads[i], NULL);
     }
-        // // Match cracked hashes
-        // for (int j = 0; j < n_hashed; j++) {
-        //     if (cracked_hashes[j].password != NULL) {
-        //         continue;
-        //     }
-        //     cracked_hash *result = get_hash_map(map, cracked_hashes[j].hash);
-        //     if (result) {
-        //         cracked_hashes[j].password = strdup(result->password);
-        //         cracked_hashes[j].alg = result->alg;
-        //     }
-        // }
-    
         // // Print results
         fp = fopen(output, "w");
         assert(fp != NULL);
@@ -227,8 +192,6 @@ void crack_hashed_passwords(char *password_list, char *hashed_list, char *output
         free(passwords[i]);
     }
     free(passwords);
-
-    // free_hash_map(map);
     free_hash_map(cracked_map);
 }
 
@@ -288,38 +251,6 @@ void insert_hash_map(hash_map *map, const char *key, const char *password, const
     map->buckets[index_] = new_node;
 }
 
-// void insert_hash_map(hash_map *map, const char *key, const char *password, const char *alg) {
-//     unsigned long index = hash_function(key);
-//     hash_node *current = map->buckets[index];
-
-//     while (current) {
-//         if (strcmp(current->key, key) == 0) {
-//             // If key exists but has NULL values, update it
-//             if (current->value.password == NULL) {
-//                 current->value.password = strdup(password);
-//                 current->value.alg = strdup(alg);
-//             }
-//             return;  // Prevent duplicate inserts
-//         }
-//         current = current->next;
-//     }
-
-//     // If key does not exist, insert a new node
-//     hash_node *new_node = malloc(sizeof(hash_node));
-//     if (!new_node) {
-//         perror("Failed to allocate node");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     strncpy(new_node->key, key, 2 * KEEP);
-//     new_node->key[2 * KEEP] = '\0';
-
-//     new_node->value.password = strdup(password);
-//     new_node->value.alg = strdup(alg);
-//     new_node->next = map->buckets[index];
-//     map->buckets[index] = new_node;
-// }
-
 // Retrieve from hash map
 cracked_hash* get_hash_map(hash_map *map, const char *key) {
     unsigned long index = hash_function(key);
@@ -348,7 +279,6 @@ void delete_hash_map(hash_map *map, const char *key) {
             }
             free(node->value.password);
             free(node->value.alg);
-            // free(node->value.index);
             free(node);
             return;
         }
@@ -366,7 +296,6 @@ void free_hash_map(hash_map *map) {
             node = node->next;
             free(temp->value.password);
             free(temp->value.alg);
-            // free(node->value.index);
             free(temp);
         }
     }
